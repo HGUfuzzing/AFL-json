@@ -71,8 +71,6 @@
 
 #include <json-c/json.h>
 
-#define INFO_json "./info.json"
-
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined (__OpenBSD__)
 #  include <sys/sysctl.h>
 #endif /* __APPLE__ || __FreeBSD__ || __OpenBSD__ */
@@ -97,6 +95,7 @@
    really makes no sense to haul them around as function parameters. */
 
 
+
 EXP_ST u8 *in_dir,                    /* Input directory with test cases  */
           *out_file,                  /* File to fuzz, if any             */
           *out_dir,                   /* Working & output directory       */
@@ -106,7 +105,8 @@ EXP_ST u8 *in_dir,                    /* Input directory with test cases  */
           *in_bitmap,                 /* Input bitmap                     */
           *doc_path,                  /* Path to documentation dir        */
           *target_path,               /* Path to target binary            */
-          *orig_cmdline;              /* Original command line            */
+          *orig_cmdline,              /* Original command line            */
+          *json_file;
 
 EXP_ST u32 exec_tmout = EXEC_TIMEOUT; /* Configurable exec timeout (ms)   */
 static u32 hang_tmout = EXEC_TIMEOUT; /* Timeout used for hang det (ms)   */
@@ -7759,7 +7759,7 @@ static void save_cmdline(u32 argc, char** argv) {
 }
 
 
-int get_info() {
+int update_json_file() {
   json_object * jobj = json_object_new_object();
 
   //json object에 information 넣고..
@@ -7781,11 +7781,14 @@ int get_info() {
   json_object_object_add(jobj, "pid", json_object_new_int(pid));
 
   //json 형식 파일로 저장
+
+
+
+  
   FILE * fp;
-  fp = fopen(INFO_json, "w");
-  if(fp == NULL) {
-    return -1;
-  }
+  fp = fopen(json_file, "w");
+  if (!fp) PFATAL("fopen() failed");
+
   fprintf(fp, "%s", json_object_to_json_string(jobj));
   json_object_put(jobj);
   fclose(fp);
@@ -7816,7 +7819,7 @@ int main(int argc, char** argv) {
   gettimeofday(&tv, &tz);
   srandom(tv.tv_sec ^ tv.tv_usec ^ getpid());
 
-  while ((opt = getopt(argc, argv, "+i:o:f:m:t:T:dnCB:S:M:x:QV")) > 0)
+  while ((opt = getopt(argc, argv, "+i:o:f:m:t:T:dnCB:S:M:x:QVj:")) > 0)
 
     switch (opt) {
 
@@ -7833,6 +7836,11 @@ int main(int argc, char** argv) {
 
         if (out_dir) FATAL("Multiple -o options not supported");
         out_dir = optarg;
+        break;
+
+      case 'j': /*json file*/
+        if(json_file) FATAL("Multiple -j options not supported");
+        json_file = optarg;
         break;
 
       case 'M': { /* master sync ID */
@@ -8121,13 +8129,15 @@ int main(int argc, char** argv) {
 
       show_stats();
 
-    //sending to server
+    //make json file.
+    if(json_file) {
       if(get_cur_time() - last_send_time >= 1000) {
-        if(get_info() == -1) {
+        if(update_json_file() == -1) {
           goto stop_fuzzing;
         }
         last_send_time = get_cur_time();
       }
+    }
 
 
 
